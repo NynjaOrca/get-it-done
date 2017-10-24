@@ -1,10 +1,10 @@
-from flask import Flask, request, redirect, render_template, session
+from flask import Flask, request, redirect, render_template, session, flash
 from flask_sqlalchemy import SQLAlchemy
 
 
 app = Flask(__name__)
 app.config['DEBUG'] = True
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://get-it-done-now:nynja@localhost:8889/get-it-done-now'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://get-it-done:nynja@localhost:8889/get-it-done'
 app.config['SQLALCHEMY_ECHO'] = True
 db = SQLAlchemy(app)
 app.secret_key = "y337kGcys&zP3B"
@@ -17,11 +17,13 @@ class Task(db.Model):
     name = db.Column(db.String(120))
     desc = db.Column(db.String(500))
     completed = db.Column(db.Boolean)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
-    def __init__(self, name, desc):
+    def __init__(self, name, desc, owner):
         self.name = name
         self.desc = desc
         self.completed = False
+        self.owner = owner
 
 # -------------------------------------------------------------------------------
 
@@ -31,6 +33,7 @@ class User(db.Model):
     username = db.Column(db.String(120), unique=True)
     email = db.Column(db.String(120), unique=True)
     password = db.Column(db.String(120))
+    tasks = db.relationship('Task', backref='owner')
 
     def __init__(self, username, email, password):
         self.username = username
@@ -42,18 +45,21 @@ class User(db.Model):
 @app.route('/', methods=['POST', 'GET'])
 def index():
 
+    task_owner = User.query.filter_by(email=session['email']).first()
+
     if request.method == 'POST':
         task_name = request.form['task']
         task_desc = request.form['desc']
         if not task_name or not task_desc:
+            flash("Task creation failed due to a lack of Title or Body", 'error')
             return redirect('/')
         else:
-            new_task = Task(task_name, task_desc)
+            new_task = Task(task_name, task_desc, task_owner)
             db.session.add(new_task)
             db.session.commit()
 
-    tasks = Task.query.filter_by(completed=False).all()
-    completed_tasks = Task.query.filter_by(completed=True).all()
+    tasks = Task.query.filter_by(completed=False, owner=task_owner).all()
+    completed_tasks = Task.query.filter_by(completed=True, owner=task_owner).all()
     return render_template('todos.html', title="Get It Done!", tasks=tasks, completed_tasks=completed_tasks)
 
 # -------------------------------------------------------------------------------
@@ -67,10 +73,11 @@ def login():
         user = User.query.filter_by(email=email).first()
         if user and user.password == password:
             session['email'] = email
+            flash("Logged in!", 'success')
+            print(session)
             return redirect('/')
         else:
-            # TODO - failed login line
-            return '<h1>ERROR</h1>'
+            flash("User password incorrect, or user does not exist", 'error')
 
     return render_template('login.html')
 
@@ -106,42 +113,43 @@ def register():
         char_count = 0
 
 
-#        for char in str(email):
-#            if char == '@':
-#                at_count += 1
-#            elif char == ' ':
-#                e_space_count += 1
-#            elif char == '.':
-#                dot_count += 1
+        for char in str(email):
+            if char == '@':
+                at_count += 1
+            elif char == ' ':
+                e_space_count += 1
+            elif char == '.':
+                dot_count += 1
 
-#        if not (at_count == 1) or not (e_space_count == 0) or not (dot_count >= 1):
-#            email_error += "invalid email address"
-        
-#        for char in str(password):
-#            char_count += 1
+        if not (at_count == 1) or not (e_space_count == 0) or not (dot_count >= 1):
+            #email_error += "invalid email address"
+            flash("Invalid Email address", 'error')
 
-#            if char in upper_alpha:
-#                upper_count += 1
-#            elif char in digits:
-#                digit_count += 1
-#            elif char == ' ':
-#                p_space_count += 1
-#            elif char in special:
-#                special_count += 1
+        for char in str(password):
+            char_count += 1
 
-#        if not upper_count >= 1:
-#            password_error += "Password must contain an upper-case character"
-#        elif not digit_count >= 1:
-#            password_error += "Password must contain a digit"
-#        elif not special_count >= 1:
-#            password_error += "Password must contain a special character"
-#        elif not p_space_count == 0:
-#            password_error += "Password must not contain whitespace"
-#        elif (len(password) < 3) or (len(password) > 20):
-#            password_error += "Password must be between 3 and 20 characters"
+            if char in upper_alpha:
+                upper_count += 1
+            elif char in digits:
+                digit_count += 1
+            elif char == ' ':
+                p_space_count += 1
+            elif char in special:
+                special_count += 1
 
-#        if verify != password:
-#            verify_error += 'Your passwords did not match'
+        if not upper_count >= 1:
+            password_error += "Password must contain an upper-case character"
+        elif not digit_count >= 1:
+            password_error += "Password must contain a digit"
+        elif not special_count >= 1:
+            password_error += "Password must contain a special character"
+        elif not p_space_count == 0:
+            password_error += "Password must not contain whitespace"
+        elif (len(password) < 3) or (len(password) > 20):
+            password_error += "Password must be between 3 and 20 characters"
+
+        if verify != password:
+            verify_error += 'Your passwords did not match'
 
         registered_user = User.query.filter_by(email=email).first()
         if not email_error and not password_error and not verify_error and not registered_user:
@@ -160,6 +168,7 @@ def register():
 @app.route('/logout')
 def logout():
     del session['email']
+    flash("Logged out!", 'success')
     return redirect('/login')
 
 # -------------------------------------------------------------------------------
