@@ -16,7 +16,10 @@
     <body>
         <div style="display:inline-block;">
                 <a href="/">Home</a>
-                <a href="/logout">Logout</a>
+                <a href="/login">Login</a>
+                {% if email,param in session %}
+                    <a href="/logout">Logout</a>
+                {% endif %}
         </div>
 
 

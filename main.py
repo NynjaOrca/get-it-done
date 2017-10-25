@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, render_template, session, flash
+from flask import Flask, request, redirect, render_template, session, flash, make_response
 from flask_sqlalchemy import SQLAlchemy
 
 
@@ -200,6 +200,7 @@ def complete_task():
 
 @app.before_request
 def require_login():
+    print(session)
     allowed_routes = ['register', 'login']
     if request.endpoint not in allowed_routes and 'email' not in session:
         return redirect('/login')
